@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp API - Painel</title>
+    <style>
+        /* Estilos básicos para o painel */
+        body { font-family: Arial, sans-serif; background-color: #222; color: #eee; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; display: flex; gap: 20px; }
+        .left-panel, .right-panel { flex: 1; background-color: #333; padding: 20px; border-radius: 8px; }
+        h1 { color: #5cb85c; }
+        input[type="text"], textarea, select { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #555; background-color: #444; color: #eee; border-radius: 4px; }
+        button { padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px; }
+        .btn-primary { background-color: #5cb85c; color: white; }
+        .btn-secondary { background-color: #555; color: white; }
+        #qrcode { width: 200px; height: 200px; border: 1px solid #5cb85c; margin-top: 10px; }
+        #logs { background-color: #111; padding: 10px; height: 150px; overflow-y: scroll; border-radius: 4px; margin-top: 10px; font-size: 12px; }
+        .session-control { display: flex; gap: 10px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="left-panel">
+            <h1>WhatsApp API – Painel</h1>
+
+            <h2>Nova sessão</h2>
+            <input type="text" id="session-name" placeholder="Nome da sessão (ex: juan)">
+            <div class="session-control">
+                <button id="start-session-btn" class="btn-primary">Iniciar sessão</button>
+                <button id="refresh-sessions-btn" class="btn-secondary">Atualizar sessões</button>
+            </div>
+
+            <h2>Instâncias</h2>
+            <ul id="sessions-list">
+                <li>Nenhuma sessão ativa</li>
+            </ul>
+
+            <h2>QR Code</h2>
+            <img id="qrcode" src="" alt="QR aparecerá aqui">
+            <p style="font-size: 12px;">QR aparecerá aqui</p>
+
+            <h2>Logs</h2>
+            <div id="logs"></div>
+        </div>
+
+        <div class="right-panel">
+            <h2>Enviar Mensagem</h2>
+            <label for="instance-select">Instância</label>
+            <select id="instance-select">
+                <option value="">Selecione uma instância</option>
+            </select>
+
+            <label for="number-input">Número (ex: 5511999999999)</label>
+            <input type="text" id="number-input">
+
+            <label for="message-input">Mensagem</label>
+            <textarea id="message-input"></textarea>
+
+            <button id="send-message-btn" class="btn-primary">Enviar</button>
+        </div>
+    </div>
+
+    <!-- SCRIPTS -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script>
+        // --- Variáveis Globais ---
+        const socket = io( );
+        const logContainer = document.getElementById('logs');
+        const qrImage = document.getElementById('qrcode');
+        const sessionInput = document.getElementById('session-name');
+        const startButton = document.getElementById('start-session-btn');
+        const sessionsList = document.getElementById('sessions-list');
+        const refreshButton = document.getElementById('refresh-sessions-btn');
+
+        // --- Funções de Utilidade ---
+        const addLog = (sessionName, message) => {
+            const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            logContainer.innerHTML += `[${now}] [${sessionName}] ${message}  
+`;
+            logContainer.scrollTop = logContainer.scrollHeight; // Scroll para o final
+        };
+
+        const updateSessionsList = (sessions) => {
+            sessionsList.innerHTML = '';
+            if (sessions.length === 0) {
+                sessionsList.innerHTML = '<li>Nenhuma sessão ativa</li>';
+                return;
+            }
+            sessions.forEach(session => {
+                sessionsList.innerHTML += `<li>${session}</li>`;
+            });
+        };
+
+        // --- Lógica de Comunicação com a API ---
+
+        // 1. Inicia a sessão (chamado ao clicar no botão)
+        const startSession = async () => {
+            const sessionName = sessionInput.value.trim();
+            if (!sessionName) {
+                alert('Por favor, insira um nome para a sessão.');
+                return;
+            }
+
+            startButton.disabled = true;
+            addLog(sessionName, 'Iniciando requisição...');
+            qrImage.src = ''; // Limpa o QR Code anterior
+
+            try {
+                const response = await fetch('/api/session/start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ sessionName: sessionName })
+                });
+
+                const data = await response.json();
+
+                if (data.status) {
+                    addLog(sessionName, data.message);
+                } else {
+                    addLog(sessionName, `Erro ao iniciar: ${data.message}`);
+                }
+            } catch (error) {
+                addLog(sessionName, `Erro de rede: ${error.message}`);
+            } finally {
+                startButton.disabled = false;
+            }
+        };
+
+        // 2. Atualiza a lista de sessões
+        const fetchSessions = async () => {
+            try {
+                const response = await fetch('/api/sessions');
+                const data = await response.json();
+                if (data.status) {
+                    updateSessionsList(data.sessions);
+                } else {
+                    addLog('frontend', `Erro ao buscar sessões: ${data.message}`);
+                }
+            } catch (error) {
+                addLog('frontend', `Erro de rede ao buscar sessões: ${error.message}`);
+            }
+        };
+
+        // --- Listeners do Socket.io ---
+
+        // Recebe o QR Code do backend
+        socket.on('qr', (data) => {
+            addLog('Socket', 'QR Code recebido. Exibindo...');
+            
+            // CORREÇÃO APLICADA: Garante que o prefixo Base64 esteja presente
+            const qrBase64 = data.qr.startsWith('data:image') ? data.qr : `data:image/png;base64,${data.qr}`;
+            qrImage.src = qrBase64; 
+        });
+
+        // Recebe atualizações de status (conectado/desconectado)
+        socket.on('status', (data) => {
+            if (data.status === 'connected') {
+                addLog(data.sessionName, 'Conectado com sucesso!');
+                qrImage.src = ''; // Limpa o QR Code
+                fetchSessions(); // Atualiza a lista
+            } else if (data.status === 'disconnected') {
+                addLog(data.sessionName, `Desconectado. Motivo: ${data.reason || 'Desconhecido'}`);
+                fetchSessions(); // Atualiza a lista
+            }
+        });
+
+        // --- Inicialização ---
+
+        // Associa a função ao botão
+        startButton.addEventListener('click', startSession);
+        refreshButton.addEventListener('click', fetchSessions);
+
+        // Busca as sessões ao carregar a página
+        fetchSessions();
+    </script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+# Node modules
+/node_modules
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.npm
+.eslintcache
+
+# Dependency directories
+/dist
+/build
+
+# Local environment
+.env
+.env.local
+
+# Baileys Sessions (CRUCIAL)
+/sessions

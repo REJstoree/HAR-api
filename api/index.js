@@ -1,26 +1,13 @@
-// C:\HAR-API\api\index.js (Novo Arquivo para Vercel)
+// C:\HAR-API\api\index.js (Simplificado para Vercel)
 
 const express = require('express');
-const http = require('http' );
-const socketIo = require('socket.io');
-const path = require('path');
 const routes = require('../src/routes'); // Ajuste o caminho para routes.js
 
 const app = express();
 app.use(express.json());
 
-// O Vercel lida com arquivos estáticos de forma diferente, mas vamos manter a rota API
+// O Vercel lida com o servidor e a porta. Apenas exportamos o app.
 app.use('/api', routes);
 
-// O Vercel não usa o listen tradicional, mas precisamos do servidor HTTP para o Socket.io
-const server = http.createServer(app );
-const io = socketIo(server, { cors: { origin: '*' } });
-
-global.io = io;
-
-io.on('connection', (socket) => {
-  console.log('Socket conectado', socket.id);
-});
-
-// Exporta o servidor para o Vercel
-module.exports = server; 
+// Exporta o app do Express
+module.exports = app; 

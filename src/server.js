@@ -1,48 +1,27 @@
+// src/server.js
+
 const express = require('express');
 const cors = require('cors');
-const { Server } = require('socket.io');
-const http = require('http');
+const http = require('http' );
 const path = require('path');
 const routes = require('./routes');
-const { initializeSession } = require('./sessionmanager');
+const { loadExistingSessions } = require('./sessionManager'); // Apenas o que é necessário
 
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server, {
-    cors: {
-        origin: '*',
-        methods: ['GET', 'POST']
-    }
-});
+const server = http.createServer(app );
 
 // Middlewares
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '../public')));
+app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // Rotas da API
-app.use('/api', routes(io));
+app.use('/api', routes());
 
 // Rota principal
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '../public', 'index.html'));
+    res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });
 
-// Socket.io connection
-io.on('connection', (socket) => {
-    console.log('Cliente conectado:', socket.id);
-
-    socket.on('disconnect', () => {
-        console.log('Cliente desconectado:', socket.id);
-    });
-});
-
-// Inicializar sessões salvas (opcional)
-// initializeSession();
-
-const PORT = process.env.PORT || 3000;
-
-server.listen(PORT, () => {
-    console.log(`🚀 Servidor rodando na porta ${PORT}`);
-    console.log(`📱 WhatsApp API disponível em http://localhost:${PORT}`);
-});
+// Exporta o app do Express
+module.exports = app;

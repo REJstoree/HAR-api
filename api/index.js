@@ -1,13 +1,22 @@
-// C:\HAR-API\api\index.js (Simplificado para Vercel)
+// api/index.js
 
 const express = require('express');
-const routes = require('../src/routes'); // Ajuste o caminho para routes.js
+const routes = require('../src/routes'); 
+const path = require('path');
 
 const app = express();
+
+// Middlewares
 app.use(express.json());
+app.use(express.static(path.join(__dirname, '..', 'public')));
 
-// O Vercel lida com o servidor e a porta. Apenas exportamos o app.
-app.use('/api', routes);
+// Rotas da API
+app.use('/api', routes());
 
-// Exporta o app do Express
-module.exports = app; 
+// Rota principal (para o painel)
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
+});
+
+// Exporta o app do Express para o Vercel
+module.exports = app;

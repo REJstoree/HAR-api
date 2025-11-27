@@ -1,15 +1,7 @@
-// C:\HAR-API\src\whatsapp.js
+// src/whatsapp.js
 
-const {
-    default: makeWASocket,
-    useMultiFileAuthState,
-    DisconnectReason,
-    fetchLatestBaileysVersion,
-    makeCacheableSignalKeyStore,
-    isJidBroadcast,
-    delay
-} = require('@whiskeysockets/baileys');
-const { Boom } = require('@hapi/boom');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, isJidBroadcast, delay } = require('@whiskeysockets/baileys');
+const Boom = require('@hapi/boom');
 const pino = require('pino');
 const fs = require('fs');
 const qrcode = require('qrcode');
@@ -18,9 +10,9 @@ const qrcode = require('qrcode');
 const logger = pino({ level: 'silent' });
 
 // Função para criar uma nova sessão
-async function createSession(sessionId, io) {
+async function createSession(sessionId) {
     const sessionPath = `./sessions/${sessionId}`;
-    
+
     // Cria a pasta de sessão se não existir
     if (!fs.existsSync(sessionPath)) {
         fs.mkdirSync(sessionPath, { recursive: true });
@@ -29,6 +21,9 @@ async function createSession(sessionId, io) {
     // 1. Novo método para obter o estado de autenticação (multi-device)
     const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
     const { version } = await fetchLatestBaileysVersion();
+
+    // Variável para armazenar o QR Code gerado
+    let qrCodeData = null;
 
     // 2. Configuração do socket
     const sock = makeWASocket({
@@ -51,14 +46,17 @@ async function createSession(sessionId, io) {
         const { connection, lastDisconnect, qr } = update;
 
         if (qr) {
-            // Envia o QR Code via Socket.io
-            qrcode.toDataURL(qr, (err, url) => {
-                if (err) {
-                    console.error('Erro ao gerar QR Code:', err);
-                    return;
-                }
-                io.emit('qr', { sessionId, qrCode: url });
-                console.log(`QR Code gerado para a sessão: ${sessionId}`);
+            // Se o QR Code for gerado, armazena a URL de dados
+            await new Promise((resolve, reject) => {
+                qrcode.toDataURL(qr, (err, url) => {
+                    if (err) {
+                        console.error('Erro ao gerar QR Code:', err);
+                        reject(err);
+                        return;
+                    }
+                    qrCodeData = url; // Armazena o QR Code
+                    resolve();
+                });
             });
         }
 
@@ -66,45 +64,66 @@ async function createSession(sessionId, io) {
             let reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
 
             if (reason === DisconnectReason.badSession || reason === DisconnectReason.loggedOut) {
-                console.log(`Sessão desconectada. Deletando arquivos de sessão para ${sessionId}`);
-                // Deleta a sessão e tenta reconectar
+                console.log('Sessão desconectada. Deletando arquivos de sessão para', sessionId);
                 fs.rmSync(sessionPath, { recursive: true, force: true });
-                createSession(sessionId, io);
+                createSession(sessionId);
             } else if (reason === DisconnectReason.restartRequired || reason === DisconnectReason.timedOut) {
                 console.log('Reinicialização necessária. Reconectando...');
                 await delay(5000);
-                createSession(sessionId, io);
+                createSession(sessionId);
             } else {
-                console.log(`Conexão fechada por: ${reason}. Tentando reconectar...`);
+                console.log('Conexão fechada por:', reason, '. Tentando reconectar...');
                 await delay(5000);
-                createSession(sessionId, io);
+                createSession(sessionId);
             }
         } else if (connection === 'open') {
-            io.emit('ready', { sessionId, message: 'Sessão conectada com sucesso!' });
-            console.log(`Sessão aberta: ${sessionId}`);
+            console.log('Sessão aberta:', sessionId);
         }
     });
 
     // 5. Listener de mensagens (exemplo)
     sock.ev.on('messages.upsert', async (m) => {
         // Lógica para lidar com novas mensagens aqui
-        // console.log(JSON.stringify(m, undefined, 2));
     });
 
-    return sock;
+    // Espera até que o QR Code seja gerado (ou a conexão seja aberta)
+    let attempts = 0;
+    while (!qrCodeData && sock.ws.readyState !== sock.ws.OPEN && attempts < 20) {
+        await delay(1000);
+        attempts++;
+    }
+
+    // Retorna o socket e o QR Code (se disponível)
+    return { sock, qrCodeData };
 }
 
 // Função para listar sessões existentes
 function listSessions() {
-    // Garante que a pasta 'sessions' exista antes de tentar ler
     if (!fs.existsSync('./sessions')) {
         return [];
     }
+
     const sessions = fs.readdirSync('./sessions').filter(f => fs.statSync(`./sessions/${f}`).isDirectory());
     return sessions;
 }
 
+// Função para obter uma sessão ativa
+function getSession(sessionId) {
+    const sessionPath = `./sessions/${sessionId}`;
+    if (fs.existsSync(sessionPath)) {
+        return { id: sessionId, status: 'active' };
+    }
+    return null;
+}
+
+// Função para obter todas as sessões ativas (apenas as pastas existentes)
+function getActiveSessions() {
+    return listSessions();
+}
+
 module.exports = {
     createSession,
-    listSessions
+    listSessions,
+    getSession,
+    getActiveSessions
 };

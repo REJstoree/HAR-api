@@ -1,9 +1,9 @@
-// C:\HAR-API\src\routes.js
+// src/routes.js
 
 const express = require('express');
-const { startSession, getActiveSessions, getSession } = require('./sessionmanager');
+const { startSession, getActiveSessions, getSession } = require('./sessionManager');
 
-module.exports = (io) => {
+module.exports = () => {
     const router = express.Router();
 
     // Rota para listar sessões ativas
@@ -16,7 +16,7 @@ module.exports = (io) => {
     });
 
     // Rota para iniciar uma nova sessão
-    router.post('/start', (req, res) => {
+    router.post('/start', async (req, res) => {
         const { sessionId } = req.body;
 
         if (!sessionId) {
@@ -27,14 +27,24 @@ module.exports = (io) => {
         }
 
         try {
-            // startSession PRECISA do 'io' para emitir o QR Code
-            startSession(sessionId, io);
-            res.json({
-                status: 'success',
-                message: `Sessão ${sessionId} iniciada. Aguarde o QR Code.`,
-                sessionId: sessionId
-            });
+            const { qrCodeData } = await startSession(sessionId); 
+            
+            if (qrCodeData) {
+                res.json({
+                    status: 'qr_code_generated',
+                    message: `Sessão ${sessionId} iniciada. Escaneie o QR Code.`,
+                    sessionId: sessionId,
+                    qrCode: qrCodeData
+                });
+            } else {
+                res.json({
+                    status: 'success',
+                    message: `Sessão ${sessionId} iniciada. Verifique o status.`,
+                    sessionId: sessionId
+                });
+            }
         } catch (error) {
+            console.error('Erro ao iniciar sessão:', error);
             res.status(500).json({
                 status: 'error',
                 message: 'Erro ao iniciar sessão.',
@@ -56,7 +66,7 @@ module.exports = (io) => {
 
         try {
             const session = getSession(sessionId);
-            
+
             if (!session) {
                 return res.status(404).json({
                     status: 'error',
@@ -64,56 +74,20 @@ module.exports = (io) => {
                 });
             }
 
-            const formattedNumber = number.includes('@s.whatsapp.net') 
-                ? number 
-                : `${number}@s.whatsapp.net`;
-
-            await session.sendMessage(formattedNumber, { text: message });
+            // Lógica de envio de mensagem (a ser implementada)
+            // Em Serverless, você precisará de uma solução de banco de dados para gerenciar o estado
+            // da sessão e um webhook para receber mensagens.
 
             res.json({
-                status: 'success',
-                message: 'Mensagem enviada com sucesso.'
+                status: 'warning',
+                message: 'A lógica de envio de mensagem precisa ser adaptada para o Vercel (Serverless).'
             });
+
         } catch (error) {
+            console.error('Erro ao enviar mensagem:', error);
             res.status(500).json({
                 status: 'error',
                 message: 'Erro ao enviar mensagem.',
-                error: error.message
-            });
-        }
-    });
-
-    // Rota para desconectar sessão
-    router.post('/disconnect', async (req, res) => {
-        const { sessionId } = req.body;
-
-        if (!sessionId) {
-            return res.status(400).json({
-                status: 'error',
-                message: 'O campo sessionId é obrigatório.'
-            });
-        }
-
-        try {
-            const session = getSession(sessionId);
-            
-            if (!session) {
-                return res.status(404).json({
-                    status: 'error',
-                    message: 'Sessão não encontrada.'
-                });
-            }
-
-            await session.logout();
-
-            res.json({
-                status: 'success',
-                message: `Sessão ${sessionId} desconectada com sucesso.`
-            });
-        } catch (error) {
-            res.status(500).json({
-                status: 'error',
-                message: 'Erro ao desconectar sessão.',
                 error: error.message
             });
         }

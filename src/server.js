@@ -1,32 +1,48 @@
 const express = require('express');
-const http = require('http' );
-const socketIo = require('socket.io');
+const cors = require('cors');
+const { Server } = require('socket.io');
+const http = require('http');
 const path = require('path');
 const routes = require('./routes');
-
-// Log de inicialização para depuração
-console.log('--- Servidor Node.js Carregado ---');
+const { initializeSession } = require('./sessionmanager');
 
 const app = express();
-app.use(express.json());
-
-// 1. Sirva os arquivos estáticos (frontend) primeiro.
-app.use(express.static(path.join(__dirname, '..', 'public')));
-
-// 2. Use as rotas da API com o prefixo '/api'.
-app.use('/api', routes);
-
-const server = http.createServer(app );
-// Configuração do Socket.io
-const io = socketIo(server, { cors: { origin: '*' } });
-
-// Torna o Socket.io globalmente acessível para o whatsapp.js
-global.io = io;
-
-io.on('connection', (socket) => {
-  console.log('Socket conectado', socket.id);
+const server = http.createServer(app);
+const io = new Server(server, {
+    cors: {
+        origin: '*',
+        methods: ['GET', 'POST']
+    }
 });
 
-// Usa a porta do ambiente (para nuvem) ou 3000 (para local)
+// Middlewares
+app.use(cors());
+app.use(express.json());
+app.use(express.static(path.join(__dirname, '../public')));
+
+// Rotas da API
+app.use('/api', routes(io));
+
+// Rota principal
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, '../public', 'index.html'));
+});
+
+// Socket.io connection
+io.on('connection', (socket) => {
+    console.log('Cliente conectado:', socket.id);
+
+    socket.on('disconnect', () => {
+        console.log('Cliente desconectado:', socket.id);
+    });
+});
+
+// Inicializar sessões salvas (opcional)
+// initializeSession();
+
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Rodando em http://localhost:${PORT}` ));
+
+server.listen(PORT, () => {
+    console.log(`🚀 Servidor rodando na porta ${PORT}`);
+    console.log(`📱 WhatsApp API disponível em http://localhost:${PORT}`);
+});

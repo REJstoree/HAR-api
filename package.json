@@ -1,9 +1,18 @@
 {
+  "name": "whatsapp-api",
   "version": "1.0.0",
+  "description": "WhatsApp API using Baileys",
   "main": "src/server.js",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js"
+    "dev": "nodemon src/server.js",
+    "build": "echo 'No build step required'",
+    "postinstall": "echo 'Dependencies installed successfully'"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.20",
@@ -16,5 +25,16 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.0"
+  },
+  "keywords": [
+    "whatsapp",
+    "api",
+    "baileys",
+    "nodejs"
+  ],
+  "author": "",
+  "repository": {
+    "type": "git",
+    "url": ""
   }
 }

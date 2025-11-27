@@ -1,23 +1,22 @@
 {
   "version": 2,
+  "installCommand": "npm install --legacy-peer-deps",
+  "buildCommand": "echo 'No build required'",
+  "framework": null,
   "builds": [
     {
-      "src": "api/index.js",
+      "src": "src/server.js",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "/api/index.js"
+      "dest": "src/server.js"
     },
     {
       "src": "/(.*)",
       "dest": "/public/$1"
     }
-  ],
-  "buildCommand": "npm install && npm run build",
-  "installCommand": "npm install --legacy-peer-deps",
-  "framework": null,
-  "outputDirectory": null
+  ]
 }

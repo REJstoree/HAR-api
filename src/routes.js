@@ -1,7 +1,7 @@
 // C:\HAR-API\src\routes.js
 
 const express = require('express');
-const { startSession, getActiveSessions, getSession } = require('./sessionManager');
+const { startSession, getActiveSessions, getSession } = require('./sessionmanager');
 
 module.exports = (io) => {
     const router = express.Router();
@@ -28,37 +28,96 @@ module.exports = (io) => {
 
         try {
             // startSession PRECISA do 'io' para emitir o QR Code
-            startSession(sessionId, io); 
+            startSession(sessionId, io);
             res.json({
                 status: 'success',
-                message: `Tentativa de iniciar sessão ${sessionId}. Verifique o QR Code.`
+                message: `Sessão ${sessionId} iniciada. Aguarde o QR Code.`,
+                sessionId: sessionId
             });
         } catch (error) {
-            console.error(`Erro ao iniciar sessão ${sessionId}:`, error);
             res.status(500).json({
                 status: 'error',
-                message: 'Erro interno ao iniciar a sessão.'
+                message: 'Erro ao iniciar sessão.',
+                error: error.message
             });
         }
     });
 
-    // Rota de exemplo para enviar mensagem
-    router.post('/send-message', async (req, res) => {
-        const { sessionId, to, message } = req.body;
-        const sock = getSession(sessionId);
+    // Rota para enviar mensagem
+    router.post('/send', async (req, res) => {
+        const { sessionId, number, message } = req.body;
 
-        if (!sock) {
-            return res.status(404).json({ status: 'error', message: 'Sessão não encontrada ou inativa.' });
+        if (!sessionId || !number || !message) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'sessionId, number e message são obrigatórios.'
+            });
         }
 
         try {
-            await sock.sendMessage(to, { text: message });
-            res.json({ status: 'success', message: 'Mensagem enviada.' });
-        } catch (err) {
-            console.error('Erro ao enviar mensagem:', err);
-            res.status(500).json({ status: 'error', message: 'Falha ao enviar mensagem.' });
+            const session = getSession(sessionId);
+            
+            if (!session) {
+                return res.status(404).json({
+                    status: 'error',
+                    message: 'Sessão não encontrada.'
+                });
+            }
+
+            const formattedNumber = number.includes('@s.whatsapp.net') 
+                ? number 
+                : `${number}@s.whatsapp.net`;
+
+            await session.sendMessage(formattedNumber, { text: message });
+
+            res.json({
+                status: 'success',
+                message: 'Mensagem enviada com sucesso.'
+            });
+        } catch (error) {
+            res.status(500).json({
+                status: 'error',
+                message: 'Erro ao enviar mensagem.',
+                error: error.message
+            });
         }
     });
 
-    return router; // GARANTE QUE O ROUTER É RETORNADO
+    // Rota para desconectar sessão
+    router.post('/disconnect', async (req, res) => {
+        const { sessionId } = req.body;
+
+        if (!sessionId) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'O campo sessionId é obrigatório.'
+            });
+        }
+
+        try {
+            const session = getSession(sessionId);
+            
+            if (!session) {
+                return res.status(404).json({
+                    status: 'error',
+                    message: 'Sessão não encontrada.'
+                });
+            }
+
+            await session.logout();
+
+            res.json({
+                status: 'success',
+                message: `Sessão ${sessionId} desconectada com sucesso.`
+            });
+        } catch (error) {
+            res.status(500).json({
+                status: 'error',
+                message: 'Erro ao desconectar sessão.',
+                error: error.message
+            });
+        }
+    });
+
+    return router;
 };
